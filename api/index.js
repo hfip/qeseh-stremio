@@ -220,9 +220,9 @@ async function getQesehStreams(imdbId, season, episode) {
                 behaviorHints: {
                     notWebReady: false,
                     headers: {
-                        "Referer": r.value.streamReferer,
-                        "Origin": r.value.streamReferer.replace(/\/$/, "")
-                    }
+    "Referer": "https://v.turkvearab.com/",
+    "Origin": "https://v.turkvearab.com"
+}
                 }
             });
         }
