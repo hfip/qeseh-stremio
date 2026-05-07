@@ -85,7 +85,6 @@ async function findEpisodeUrl(originalTitle, englishTitle, episode) {
         }
     }
 
-    // جرب البحث
     for (const title of [originalTitle, englishTitle].filter(Boolean)) {
         const searchHtml = await fetchText(BASE + "/?s=" + encodeURIComponent(title));
         if (!searchHtml) continue;
@@ -101,7 +100,6 @@ async function extractPlayerData(episodeUrl) {
     const html = await fetchText(episodeUrl);
     if (!html) return null;
 
-    // البحث عن رابط المشغل
     const watchMatch = html.match(/href="(https?:\/\/(?:qesen\.net|thenextstop\.net)[^"]*\?post=([A-Za-z0-9+/=]+))"/);
     if (!watchMatch) return null;
 
@@ -121,7 +119,11 @@ async function extractM3u8FromEmbed(embedUrl, referer) {
     const html = await fetchText(embedUrl, referer);
     if (!html || html.length < 100) return null;
 
-    // استخرج CDN info من thumbnail
+    // استخرج CDN info من sources في الكود المشفر
+    const sourcesMatch = html.match(/sources:\[{file:"(https?:\/\/[^"]+\.m3u8[^"]*)"/i);
+    if (sourcesMatch) return sourcesMatch[1];
+
+    // استخرج من الـ keys array في eval-packed JS
     const imgMatch = html.match(/https?:\/\/([a-z0-9-]+\.cdnz\.online)\/i\/(\d+)\/(\d+)\/([a-z0-9]+)\.jpg/i);
     if (!imgMatch) return null;
 
@@ -130,23 +132,38 @@ async function extractM3u8FromEmbed(embedUrl, referer) {
     const folder2 = imgMatch[3];
     const serverId = imgMatch[4];
 
-    if (!html.includes(".split('|'))")) return null;
+    // استخرج الـ keys array
+    const splitIdx = html.lastIndexOf(".split('|'))");
+    if (splitIdx < 0) return null;
 
-    // استخرج token من JS المشفر
-    const beforeSplit = html.slice(0, html.lastIndexOf(".split('|'))"));
+    const beforeSplit = html.slice(0, splitIdx);
     const lastQ = beforeSplit.lastIndexOf("'");
     const prevQ = beforeSplit.lastIndexOf("'", lastQ - 1);
     if (lastQ < 0 || prevQ < 0) return null;
 
     const keys = beforeSplit.slice(prevQ + 1, lastQ).split("|");
-    const sp43200Idx = keys.indexOf("43200");
-    const m3u8Idx = keys.indexOf("m3u8");
-    if (sp43200Idx < 0 || m3u8Idx < 0 || m3u8Idx <= sp43200Idx) return null;
 
-    const token = keys.slice(sp43200Idx + 1, m3u8Idx).filter(k => k.length > 0).join("");
+    // ابحث عن token بين sp/43200 و m3u8
+    const spIdx = keys.indexOf("sp");
+    const m3u8Idx = keys.indexOf("m3u8");
+    if (spIdx < 0 || m3u8Idx < 0) return null;
+
+    // token = كل القيم بين 43200 و m3u8
+    const idx43200 = keys.indexOf("43200");
+    if (idx43200 < 0 || m3u8Idx <= idx43200) return null;
+
+    const token = keys.slice(idx43200 + 1, m3u8Idx).filter(k => k.length > 0).join("");
     if (!token) return null;
 
-    return "https://" + cdnHost + "/hls2/" + folder1 + "/" + folder2 + "/" + serverId + "_/urlset/master.m3u8?t=" + token + "&sp=43200";
+    // ابحث عن الجودات المتاحة (l,n,h,x)
+    const qualIdx = keys.indexOf(serverId + "_");
+    let quals = ",l,n,h,";
+    if (qualIdx > 0) {
+        const possibleQuals = keys.slice(qualIdx + 1, idx43200).filter(k => /^[lnhx,]+$/.test(k));
+        if (possibleQuals.length > 0) quals = "," + possibleQuals.join(",") + ",";
+    }
+
+    return "https://" + cdnHost + "/hls2/" + folder1 + "/" + folder2 + "/" + serverId + "_" + quals + ".urlset/master.m3u8?t=" + token + "&sp=43200";
 }
 
 function buildEmbedInfo(serverName, serverId) {
@@ -187,15 +204,9 @@ async function getQesehStreams(imdbId, season, episode) {
         return [];
     }
 
-    console.log("[Qeseh] Page: " + episodeUrl);
-
     const playerData = await extractPlayerData(episodeUrl);
-    if (!playerData) {
-        console.log("[Qeseh] No player data");
-        return [];
-    }
+    if (!playerData) return [];
 
-    const streams = [];
     const supportedServers = playerData.servers.filter(s =>
         ["arab hd", "estream", "pro hd", "red hd"].includes(s.name.toLowerCase())
     );
@@ -210,6 +221,7 @@ async function getQesehStreams(imdbId, season, episode) {
         })
     );
 
+    const streams = [];
     for (const r of results) {
         if (r.status === "fulfilled" && r.value) {
             const emoji = r.value.name.toLowerCase() === "arab hd" ? "🎬" : "📺";
@@ -220,15 +232,14 @@ async function getQesehStreams(imdbId, season, episode) {
                 behaviorHints: {
                     notWebReady: false,
                     headers: {
-    "Referer": "https://v.turkvearab.com/",
-    "Origin": "https://v.turkvearab.com"
-}
+                        "Referer": "https://v.turkvearab.com/",
+                        "Origin": "https://v.turkvearab.com"
+                    }
                 }
             });
         }
     }
 
-    console.log("[Qeseh] Found " + streams.length + " streams");
     return streams;
 }
 
@@ -251,7 +262,6 @@ module.exports = async function(req, res) {
             const season = parseInt(parts[1] || "1");
             const episode = parseInt(parts[2] || "1");
 
-            console.log("[Qeseh] " + imdbId + " S" + season + "E" + episode);
             const streams = await getQesehStreams(imdbId, season, episode);
             return res.end(JSON.stringify({ streams }));
         } catch (e) {
