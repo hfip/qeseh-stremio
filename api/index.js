@@ -6,7 +6,7 @@ const FALLBACK_POSTER = "https://qeseh.net/wp-content/uploads/2026/02/cropped-qe
 
 const MANIFEST = {
     id: "community.qeseh.abdulluhx",
-    version: "1.0.0",
+    version: "1.0.1",
     name: "Qeseh by Abdulluh.X",
     description: "مسلسلات وافلام تركية مترجمة من قصة عشق",
     logo: "https://qeseh.net/wp-content/uploads/2026/02/cropped-qeseh2026-192x192.png",
@@ -119,56 +119,54 @@ async function extractM3u8FromEmbed(embedUrl, referer) {
     const html = await fetchText(embedUrl, referer);
     if (!html || html.length < 100) return null;
 
-    // استخرج CDN info من sources في الكود المشفر
+    // 1. Try to find direct sources in the HTML (standard JWPlayer)
     const sourcesMatch = html.match(/sources:\[{file:"(https?:\/\/[^"]+\.m3u8[^"]*)"/i);
     if (sourcesMatch) return sourcesMatch[1];
 
-    // استخرج من الـ keys array في eval-packed JS
-    const imgMatch = html.match(/https?:\/\/([a-z0-9-]+\.cdnz\.online)\/i\/(\d+)\/(\d+)\/([a-z0-9]+)\.jpg/i);
-    if (!imgMatch) return null;
+    // 2. Try to extract from P.A.C.K.E.R encoded script
+    try {
+        const splitIdx = html.lastIndexOf(".split('|'))");
+        if (splitIdx < 0) return null;
 
-    const cdnHost = imgMatch[1];
-    const folder1 = imgMatch[2];
-    const folder2 = imgMatch[3];
-    const serverId = imgMatch[4];
+        const beforeSplit = html.slice(0, splitIdx);
+        const lastQ = beforeSplit.lastIndexOf("'");
+        const prevQ = beforeSplit.lastIndexOf("'", lastQ - 1);
+        if (lastQ < 0 || prevQ < 0) return null;
 
-    // استخرج الـ keys array
-    const splitIdx = html.lastIndexOf(".split('|'))");
-    if (splitIdx < 0) return null;
-
-    const beforeSplit = html.slice(0, splitIdx);
-    const lastQ = beforeSplit.lastIndexOf("'");
-    const prevQ = beforeSplit.lastIndexOf("'", lastQ - 1);
-    if (lastQ < 0 || prevQ < 0) return null;
-
-    const keys = beforeSplit.slice(prevQ + 1, lastQ).split("|");
-
-    // ابحث عن token بين sp/43200 و m3u8
-    const spIdx = keys.indexOf("sp");
-    const m3u8Idx = keys.indexOf("m3u8");
-    if (spIdx < 0 || m3u8Idx < 0) return null;
-
-    // token = كل القيم بين 43200 و m3u8
-    const idx43200 = keys.indexOf("43200");
-    if (idx43200 < 0 || m3u8Idx <= idx43200) return null;
-
-    const token = keys.slice(idx43200 + 1, m3u8Idx).filter(k => k.length > 0).join("");
-    if (!token) return null;
-
-    // ابحث عن الجودات المتاحة (l,n,h,x)
-    const qualIdx = keys.indexOf(serverId + "_");
-    let quals = ",l,n,h,";
-    if (qualIdx > 0) {
-        const possibleQuals = keys.slice(qualIdx + 1, idx43200).filter(k => /^[lnhx,]+$/.test(k));
-        if (possibleQuals.length > 0) quals = "," + possibleQuals.join(",") + ",";
+        const keys = beforeSplit.slice(prevQ + 1, lastQ).split("|");
+        
+        // Find required components from keys
+        const file_code = keys.find(k => /^[a-z0-9]{12}$/.test(k)); 
+        const folder1 = keys.find(k => /^\d{2}$/.test(k)); 
+        const folder2 = keys.find(k => /^\d{5}$/.test(k)); 
+        
+        const trkarb = keys.find(k => k === "trkarb");
+        const cdn1 = keys.find(k => k === "cdn1");
+        const lsi = keys.find(k => k === "lsi");
+        const cdnz = keys.find(k => k === "cdnz");
+        const online = keys.find(k => k === "online");
+        const enc1 = keys.find(k => k === "enc1");
+        const qlf = keys.find(k => k === "qlf");
+        
+        const t = keys.find(k => k.length > 30); 
+        const s = keys.find(k => /^\d{10}$/.test(k)); 
+        const v = keys.find(k => /^\d{9}$/.test(k)); 
+        
+        if (file_code && folder1 && folder2 && t && s && v) {
+            const cdnHost = `${trkarb || "trkarb"}-${cdn1 || "cdn1"}-${lsi || "lsi"}.${cdnz || "cdnz"}.${online || "online"}`;
+            const srv = `${trkarb || "trkarb"}-${enc1 || "enc1"}-${qlf || "qlf"}`;
+            return `https://${cdnHost}/hls2/${folder1}/${folder2}/${file_code}_,l,n,h,.urlset/master.m3u8?t=${t}&s=${s}&e=43200&v=${v}&srv=${srv}&i=0.3&sp=0`;
+        }
+    } catch (e) {
+        console.error("Extraction error:", e);
     }
 
-    return "https://" + cdnHost + "/hls2/" + folder1 + "/" + folder2 + "/" + serverId + "_" + quals + ".urlset/master.m3u8?t=" + token + "&sp=43200";
+    return null;
 }
 
 function buildEmbedInfo(serverName, serverId) {
     const name = serverName.toLowerCase();
-    if (name === "arab hd") {
+    if (name === "arab hd" || name === "pro hd" || name === "red hd") {
         return {
             embedUrl: "https://v.turkvearab.com/embed-" + serverId + ".html",
             referer: "https://qesen.net/",
@@ -180,13 +178,6 @@ function buildEmbedInfo(serverName, serverId) {
             embedUrl: "https://arabveturk.com/embed-" + serverId + ".html",
             referer: "https://qesen.net/",
             streamReferer: "https://arabveturk.com/"
-        };
-    }
-    if (name === "pro hd" || name === "red hd") {
-        return {
-            embedUrl: "https://v.turkvearab.com/embed-" + serverId + ".html",
-            referer: "https://qesen.net/",
-            streamReferer: "https://v.turkvearab.com/"
         };
     }
     return null;
@@ -232,8 +223,8 @@ async function getQesehStreams(imdbId, season, episode) {
                 behaviorHints: {
                     notWebReady: false,
                     headers: {
-                        "Referer": "https://v.turkvearab.com/",
-                        "Origin": "https://v.turkvearab.com"
+                        "Referer": r.value.streamReferer,
+                        "Origin": r.value.streamReferer.replace(/\/$/, "")
                     }
                 }
             });
