@@ -3,7 +3,7 @@ const http = require("http");
 
 const BASE = "https://wwv.qeseh.com";
 const ADDON_NAME = "Qeseh by Abdulluh.X";
-const ADDON_ID = "community.qeseh.abdulluhx.v10";
+const ADDON_ID = "community.qeseh.abdulluhx.v11";
 const ADDON_LOGO = "https://qeseh.net/wp-content/uploads/2026/02/cropped-qeseh2026-192x192.png";
 
 const HEADERS = {
@@ -14,7 +14,7 @@ const HEADERS = {
 
 const manifest = {
   id: ADDON_ID,
-  version: "1.0.7",
+  version: "1.0.8",
   name: ADDON_NAME,
   description: "مسلسلات وافلام تركية مترجمة من قصة عشق",
   logo: ADDON_LOGO,
@@ -133,7 +133,7 @@ function buildStreams(result, serverName) {
       name: `Qeseh [${qualMap[s]}]`,
       title: `${emoji} ${serverName} - ${qualMap[s]} | مترجم`,
       url: varMatch[1] + s + "/index-v1-a1.m3u8" + (varMatch[3] || ""),
-      behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
+      behaviorHints: { notWebReady: false, headers: headers }
     }));
   }
 
@@ -141,27 +141,37 @@ function buildStreams(result, serverName) {
     name: "Qeseh by Abdulluh.X",
     title: `${emoji} ${serverName} | مترجم عربي`,
     url: result.m3u8,
-    behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
+    behaviorHints: { notWebReady: false, headers: headers }
   }];
+}
+
+async function findEpisodeUrl(meta, episode) {
+    const slugs = [];
+    if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle));
+    if (meta.englishTitle) slugs.push(romanizeToSlug(meta.englishTitle));
+    if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle.split(":")[0].trim()));
+
+    for (const slug of slugs) {
+        const url = `${BASE}/clarus/${slug}-episode-${episode}/`;
+        const html = await fetchText(url);
+        if (html && html.length > 1000 && !html.includes("404")) return url;
+    }
+
+    for (const title of [meta.originalTitle, meta.englishTitle].filter(Boolean)) {
+        const searchHtml = await fetchText(`${BASE}/?s=${encodeURIComponent(title)}`);
+        if (!searchHtml) continue;
+        const epPattern = new RegExp(`href="(${BASE.replace(/\./g, "\\.")}/clarus/[^"]*episode-${episode}[^"]*/)"`, "i");
+        const m = searchHtml.match(epPattern);
+        if (m) return m[1];
+    }
+    return null;
 }
 
 async function getQesehStreams(imdbId, season, episode) {
   const meta = await getTmdbMeta(imdbId);
   if (!meta) return [];
 
-  const slugs = [];
-  if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle));
-  if (meta.englishTitle) slugs.push(romanizeToSlug(meta.englishTitle));
-  
-  let episodeUrl = "";
-  for (const slug of slugs) {
-    const url = `${BASE}/clarus/${slug}-episode-${episode}/`;
-    const html = await fetchText(url);
-    if (html && html.length > 1000 && (html.includes("qeseh") || html.includes("modern-player"))) {
-      episodeUrl = url;
-      break;
-    }
-  }
+  const episodeUrl = await findEpisodeUrl(meta, episode);
   if (!episodeUrl) return [];
 
   const epHtml = await fetchText(episodeUrl);
