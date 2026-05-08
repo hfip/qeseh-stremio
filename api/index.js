@@ -6,7 +6,7 @@ const FALLBACK_POSTER = "https://qeseh.net/wp-content/uploads/2026/02/cropped-qe
 
 const MANIFEST = {
     id: "community.qeseh.abdulluhx",
-    version: "1.0.1",
+    version: "1.0.2",
     name: "Qeseh by Abdulluh.X",
     description: "مسلسلات وافلام تركية مترجمة من قصة عشق",
     logo: "https://qeseh.net/wp-content/uploads/2026/02/cropped-qeseh2026-192x192.png",
@@ -115,50 +115,57 @@ async function extractPlayerData(episodeUrl) {
     }
 }
 
+function unpack(p, a, c, k, e, d) {
+    while (c--) {
+        if (k[c]) {
+            p = p.replace(new RegExp('\\b' + c.toString(a) + '\\b', 'g'), k[c]);
+        }
+    }
+    return p;
+}
+
 async function extractM3u8FromEmbed(embedUrl, referer) {
     const html = await fetchText(embedUrl, referer);
     if (!html || html.length < 100) return null;
 
-    // 1. Try to find direct sources in the HTML (standard JWPlayer)
+    // 1. Try to find direct sources in the HTML
     const sourcesMatch = html.match(/sources:\[{file:"(https?:\/\/[^"]+\.m3u8[^"]*)"/i);
     if (sourcesMatch) return sourcesMatch[1];
 
     // 2. Try to extract from P.A.C.K.E.R encoded script
-    try {
-        const splitIdx = html.lastIndexOf(".split('|'))");
-        if (splitIdx < 0) return null;
-
-        const beforeSplit = html.slice(0, splitIdx);
-        const lastQ = beforeSplit.lastIndexOf("'");
-        const prevQ = beforeSplit.lastIndexOf("'", lastQ - 1);
-        if (lastQ < 0 || prevQ < 0) return null;
-
-        const keys = beforeSplit.slice(prevQ + 1, lastQ).split("|");
-        
-        // Find required components from keys
-        const file_code = keys.find(k => /^[a-z0-9]{12}$/.test(k)); 
-        const folder1 = keys.find(k => /^\d{2}$/.test(k)); 
-        const folder2 = keys.find(k => /^\d{5}$/.test(k)); 
-        
-        const trkarb = keys.find(k => k === "trkarb");
-        const cdn1 = keys.find(k => k === "cdn1");
-        const lsi = keys.find(k => k === "lsi");
-        const cdnz = keys.find(k => k === "cdnz");
-        const online = keys.find(k => k === "online");
-        const enc1 = keys.find(k => k === "enc1");
-        const qlf = keys.find(k => k === "qlf");
-        
-        const t = keys.find(k => k.length > 30); 
-        const s = keys.find(k => /^\d{10}$/.test(k)); 
-        const v = keys.find(k => /^\d{9}$/.test(k)); 
-        
-        if (file_code && folder1 && folder2 && t && s && v) {
-            const cdnHost = `${trkarb || "trkarb"}-${cdn1 || "cdn1"}-${lsi || "lsi"}.${cdnz || "cdnz"}.${online || "online"}`;
-            const srv = `${trkarb || "trkarb"}-${enc1 || "enc1"}-${qlf || "qlf"}`;
-            return `https://${cdnHost}/hls2/${folder1}/${folder2}/${file_code}_,l,n,h,.urlset/master.m3u8?t=${t}&s=${s}&e=43200&v=${v}&srv=${srv}&i=0.3&sp=0`;
+    const packedMatch = html.match(/eval\(function\(p,a,c,k,e,d\)\{.*\}\((.*)\)\)/);
+    if (packedMatch) {
+        try {
+            const paramsStr = packedMatch[1];
+            // Manually extract parameters to avoid eval issues
+            const kStart = paramsStr.indexOf("'");
+            const kEnd = paramsStr.lastIndexOf("'");
+            const kStr = paramsStr.substring(kStart + 1, kEnd);
+            const kArr = kStr.split('|');
+            
+            const pStr = paramsStr.substring(1, paramsStr.indexOf("',", 0));
+            const otherParams = paramsStr.substring(paramsStr.lastIndexOf("',") + 2).split(',');
+            const aVal = parseInt(otherParams[1]);
+            const cVal = parseInt(otherParams[2]);
+            
+            const unpacked = unpack(pStr, aVal, cVal, kArr, 0, {});
+            const m3u8Match = unpacked.match(/https?:\/\/[^"']+\.m3u8[^"']*/);
+            if (m3u8Match) {
+                let url = m3u8Match[0].replace(/&amp;/g, '&');
+                // Ensure correct params if they are in the keys but missing in URL
+                if (!url.includes('?t=') || !url.includes('&s=')) {
+                   const t = kArr.find(k => k.length > 30);
+                   const s = kArr.find(k => /^\d{10}$/.test(k));
+                   const v = kArr.find(k => /^\d{8,9}$/.test(k));
+                   if (t && !url.includes('?t=')) url += `?t=${t}`;
+                   if (s && !url.includes('&s=')) url += `&s=${s}`;
+                   if (v && !url.includes('&v=')) url += `&v=${v}`;
+                }
+                return url;
+            }
+        } catch (e) {
+            console.error("Unpack error:", e);
         }
-    } catch (e) {
-        console.error("Extraction error:", e);
     }
 
     return null;
@@ -166,17 +173,21 @@ async function extractM3u8FromEmbed(embedUrl, referer) {
 
 function buildEmbedInfo(serverName, serverId) {
     const name = serverName.toLowerCase();
-    if (name === "arab hd" || name === "pro hd" || name === "red hd") {
+    const common = {
+        referer: "https://qesen.net/",
+    };
+
+    if (name.includes("arab") || name.includes("pro") || name.includes("red") || name.includes("turk")) {
         return {
+            ...common,
             embedUrl: "https://v.turkvearab.com/embed-" + serverId + ".html",
-            referer: "https://qesen.net/",
             streamReferer: "https://v.turkvearab.com/"
         };
     }
     if (name === "estream") {
         return {
+            ...common,
             embedUrl: "https://arabveturk.com/embed-" + serverId + ".html",
-            referer: "https://qesen.net/",
             streamReferer: "https://arabveturk.com/"
         };
     }
@@ -187,19 +198,15 @@ async function getQesehStreams(imdbId, season, episode) {
     const meta = await getTmdbMeta(imdbId);
     if (!meta) return [];
 
-    console.log("[Qeseh] " + meta.originalTitle + " E" + episode);
-
     const episodeUrl = await findEpisodeUrl(meta.originalTitle, meta.englishTitle, episode);
-    if (!episodeUrl) {
-        console.log("[Qeseh] Episode not found");
-        return [];
-    }
+    if (!episodeUrl) return [];
 
     const playerData = await extractPlayerData(episodeUrl);
     if (!playerData) return [];
 
+    const supportedNames = ["arab hd", "estream", "pro hd", "red hd", "turk"];
     const supportedServers = playerData.servers.filter(s =>
-        ["arab hd", "estream", "pro hd", "red hd"].includes(s.name.toLowerCase())
+        supportedNames.some(name => s.name.toLowerCase().includes(name))
     );
 
     const results = await Promise.allSettled(
@@ -215,7 +222,7 @@ async function getQesehStreams(imdbId, season, episode) {
     const streams = [];
     for (const r of results) {
         if (r.status === "fulfilled" && r.value) {
-            const emoji = r.value.name.toLowerCase() === "arab hd" ? "🎬" : "📺";
+            const emoji = r.value.name.toLowerCase().includes("hd") ? "🎬" : "📺";
             streams.push({
                 name: "Qeseh by Abdulluh.X",
                 title: emoji + " " + r.value.name + " | مترجم عربي",
@@ -256,7 +263,6 @@ module.exports = async function(req, res) {
             const streams = await getQesehStreams(imdbId, season, episode);
             return res.end(JSON.stringify({ streams }));
         } catch (e) {
-            console.error("[Qeseh] Error: " + e.message);
             return res.end(JSON.stringify({ streams: [] }));
         }
     }
