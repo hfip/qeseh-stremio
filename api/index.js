@@ -4,7 +4,7 @@ const http = require("http");
 const BASE = "https://wwv.qeseh.com";
 const MANIFEST = {
     id: "community.qeseh.abdulluhx",
-    version: "1.0.5",
+    version: "1.0.6",
     name: "Qeseh by Abdulluh.X",
     description: "مسلسلات وافلام تركية مترجمة من قصة عشق",
     logo: "https://qeseh.net/wp-content/uploads/2026/02/cropped-qeseh2026-192x192.png",
@@ -87,14 +87,6 @@ async function findEpisodeUrl(originalTitle, englishTitle, episode) {
             return url;
         }
     }
-
-    for (const title of [originalTitle, englishTitle].filter(Boolean)) {
-        const searchHtml = await fetchText(`${BASE}/?s=${encodeURIComponent(title)}`);
-        if (!searchHtml) continue;
-        const epPattern = new RegExp(`href="(${BASE.replace(/\./g, "\\.")}/clarus/[^"]*episode-${episode}[^"]*/)"`, "i");
-        const m = searchHtml.match(epPattern);
-        if (m) return m[1];
-    }
     return null;
 }
 
@@ -135,7 +127,7 @@ async function extractM3u8FromEmbed(embedUrl, referer) {
 
 function buildEmbedInfo(serverName, serverId) {
     const name = serverName.toLowerCase();
-    const common = { referer: "https://qesen.net/" };
+    const common = { referer: "https://maxmoto.net/" };
     if (name.includes("arab") || name.includes("pro") || name.includes("red") || name.includes("turk")) {
         return { ...common, embedUrl: `https://v.turkvearab.com/embed-${serverId}.html`, streamReferer: "https://v.turkvearab.com/" };
     }
@@ -152,8 +144,11 @@ async function getQesehStreams(imdbId, season, episode) {
     const episodeUrl = await findEpisodeUrl(meta.originalTitle, meta.englishTitle, episode);
     if (!episodeUrl) return [];
     const html = await fetchText(episodeUrl);
-    const watchMatch = html.match(/href="(https?:\/\/(?:qesen\.net|thenextstop\.net)[^"]*\?post=([A-Za-z0-9+/=]+))"/);
+    
+    // Support multiple watch domains
+    const watchMatch = html.match(/href="(https?:\/\/(?:qesen\.net|thenextstop\.net|maxmoto\.net)[^"]*\?post=([A-Za-z0-9+/=]+))"/);
     if (!watchMatch) return [];
+
     try {
         const decoded = JSON.parse(Buffer.from(watchMatch[2], "base64").toString("utf-8"));
         const results = await Promise.allSettled(
@@ -166,11 +161,19 @@ async function getQesehStreams(imdbId, season, episode) {
                 return { name: server.name, url: m3u8, streamReferer: info.streamReferer };
             })
         );
+
         const streams = [];
         for (const r of results) {
             if (r.status === "fulfilled" && r.value) {
                 const emoji = r.value.name.toLowerCase().includes("hd") ? "🎬" : "📺";
                 const urlsetMatch = r.value.url.match(/^(.+_),([a-zA-Z]+(?:,[a-zA-Z]+)*),\.urlset\/master\.m3u8(\?.+)?$/);
+                
+                const commonHeaders = {
+                    "Referer": r.value.streamReferer || "https://v.turkvearab.com/",
+                    "Origin": (r.value.streamReferer || "https://v.turkvearab.com/").replace(/\/$/, ""),
+                    "User-Agent": HEADERS["User-Agent"]
+                };
+
                 if (urlsetMatch) {
                     const qualMap = { x: "1080P", h: "720P", n: "480P", l: "360P" };
                     urlsetMatch[2].split(",").forEach(q => {
@@ -179,7 +182,7 @@ async function getQesehStreams(imdbId, season, episode) {
                                 name: `Qeseh [${qualMap[q]}]`,
                                 title: `${emoji} ${r.value.name} - ${qualMap[q]}`,
                                 url: `${urlsetMatch[1]}${q}/index-v1-a1.m3u8${urlsetMatch[3] || ""}`,
-                                behaviorHints: { notWebReady: true, proxyHeaders: { "common": { "Referer": r.value.streamReferer, "User-Agent": HEADERS["User-Agent"] } } }
+                                behaviorHints: { notWebReady: true, proxyHeaders: { "common": commonHeaders } }
                             });
                         }
                     });
@@ -188,7 +191,7 @@ async function getQesehStreams(imdbId, season, episode) {
                         name: "Qeseh by Abdulluh.X",
                         title: `${emoji} ${r.value.name} | مترجم عربي`,
                         url: r.value.url,
-                        behaviorHints: { notWebReady: true, proxyHeaders: { "common": { "Referer": r.value.streamReferer || "https://v.turkvearab.com/", "User-Agent": HEADERS["User-Agent"] } } }
+                        behaviorHints: { notWebReady: true, proxyHeaders: { "common": commonHeaders } }
                     });
                 }
             }
