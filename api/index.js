@@ -204,8 +204,14 @@ async function getQesehStreams(imdbId, season, episode) {
                                 title: `${emoji} ${r.value.name} - ${qualMap[q]}`,
                                 url: `${urlsetMatch[1]}${q}/index-v1-a1.m3u8${urlsetMatch[3] || ""}`,
                                 behaviorHints: {
-                                    notWebReady: false,
-                                    headers: { "Referer": r.value.streamReferer, "Origin": r.value.streamReferer.replace(/\/$/, "") }
+                                    notWebReady: true,
+                                    proxyHeaders: {
+                                        "common": {
+                                            "Referer": r.value.streamReferer,
+                                            "Origin": r.value.streamReferer.replace(/\/$/, ""),
+                                            "User-Agent": HEADERS["User-Agent"]
+                                        }
+                                    }
                                 }
                             });
                         }
@@ -216,8 +222,14 @@ async function getQesehStreams(imdbId, season, episode) {
                         title: `${emoji} ${r.value.name} | مترجم عربي`,
                         url: r.value.url,
                         behaviorHints: {
-                            notWebReady: false,
-                            headers: r.value.streamReferer ? { "Referer": r.value.streamReferer, "Origin": r.value.streamReferer.replace(/\/$/, "") } : {}
+                            notWebReady: true,
+                            proxyHeaders: {
+                                "common": {
+                                    "Referer": r.value.streamReferer || "https://v.turkvearab.com/",
+                                    "Origin": (r.value.streamReferer || "https://v.turkvearab.com/").replace(/\/$/, ""),
+                                    "User-Agent": HEADERS["User-Agent"]
+                                }
+                            }
                         }
                     });
                 }
