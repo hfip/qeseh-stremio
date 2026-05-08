@@ -1,229 +1,196 @@
 const https = require("https");
 const http = require("http");
 
-const BASE = "https://wwv.qeseh.com";
-const ADDON_NAME = "Qeseh by Abdulluh.X";
-const ADDON_ID = "community.qeseh.abdulluhx.v12";
-const ADDON_LOGO = "https://qeseh.net/wp-content/uploads/2026/02/cropped-qeseh2026-192x192.png";
-
-const HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "ar,en-US;q=0.8,en;q=0.5"
+const BASE = "https://3iskk.online";
+const MANIFEST = {
+    id: "community.3iskk.abdulluhx",
+    version: "1.0.3",
+    name: "3iskk by Abdulluh.X",
+    description: "مسلسلات وافلام تركية مترجمة من موقع قصة عشق الجديد",
+    logo: "https://3iskk.online/wp-content/uploads/2026/04/cropped-3isk-favicon1-192x192.png",
+    types: ["series", "movie"],
+    catalogs: [],
+    resources: ["stream"],
+    idPrefixes: ["tt"]
 };
 
-const manifest = {
-  id: ADDON_ID,
-  version: "1.0.9",
-  name: ADDON_NAME,
-  description: "مسلسلات وافلام تركية مترجمة من قصة عشق",
-  logo: ADDON_LOGO,
-  resources: ["stream"],
-  types: ["series"],
-  idPrefixes: ["tt"]
+const HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ar,en-US;q=0.8,en;q=0.5"
 };
 
 function fetchText(url, referer) {
-  return new Promise((resolve) => {
-    const client = url.startsWith("https") ? https : http;
-    const timer = setTimeout(() => resolve(""), 8000);
-    try {
-      const req = client.get(url, {
-        headers: { ...HEADERS, "Referer": referer || BASE }
-      }, (res) => {
-        if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
-          clearTimeout(timer);
-          return resolve(fetchText(new URL(res.headers.location, url).toString(), referer));
-        }
-        const chunks = [];
-        res.on("data", c => chunks.push(c));
-        res.on("end", () => { clearTimeout(timer); resolve(Buffer.concat(chunks).toString("utf-8")); });
-      });
-      req.on("error", () => { clearTimeout(timer); resolve(""); });
-    } catch (e) { clearTimeout(timer); resolve(""); }
-  });
+    return new Promise((resolve) => {
+        const client = url.startsWith("https") ? https : http;
+        const timer = setTimeout(() => resolve(""), 10000);
+        try {
+            const req = client.get(url, {
+                headers: { ...HEADERS, "Referer": referer || BASE }
+            }, (res) => {
+                if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+                    clearTimeout(timer);
+                    return resolve(fetchText(new URL(res.headers.location, url).toString(), referer));
+                }
+                const chunks = [];
+                res.on("data", c => chunks.push(c));
+                res.on("end", () => { clearTimeout(timer); resolve(Buffer.concat(chunks).toString("utf-8")); });
+            });
+            req.on("error", () => { clearTimeout(timer); resolve(""); });
+        } catch (e) { clearTimeout(timer); resolve(""); }
+    });
 }
 
 function fetchJson(url) {
-  return new Promise((resolve) => {
-    const client = url.startsWith("https") ? https : http;
-    const timer = setTimeout(() => resolve({}), 8000);
-    try {
-      const req = client.get(url, {
-        headers: { ...HEADERS, "Accept": "application/json" }
-      }, (res) => {
-        let data = "";
-        res.on("data", c => data += c);
-        res.on("end", () => { clearTimeout(timer); try { resolve(JSON.parse(data)); } catch (e) { resolve({}); } });
-      });
-      req.on("error", () => { clearTimeout(timer); resolve({}); });
-    } catch (e) { clearTimeout(timer); resolve({}); }
-  });
+    return new Promise((resolve) => {
+        const client = url.startsWith("https") ? https : http;
+        const timer = setTimeout(() => resolve({}), 8000);
+        try {
+            const req = client.get(url, {
+                headers: { ...HEADERS, "Accept": "application/json" }
+            }, (res) => {
+                let data = "";
+                res.on("data", c => data += c);
+                res.on("end", () => { clearTimeout(timer); try { resolve(JSON.parse(data)); } catch (e) { resolve({}); } });
+            });
+            req.on("error", () => { clearTimeout(timer); resolve({}); });
+        } catch (e) { clearTimeout(timer); resolve({}); }
+    });
 }
 
 async function getTmdbMeta(imdbId) {
-  const TMDB_KEY = "439c478a771f35c05022f9feabcca01c";
-  const data = await fetchJson(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_KEY}&external_source=imdb_id`);
-  const tv = data.tv_results && data.tv_results[0];
-  if (!tv) return null;
-  const enData = await fetchJson(`https://api.themoviedb.org/3/tv/${tv.id}?api_key=${TMDB_KEY}&language=en-US`);
-  const arData = await fetchJson(`https://api.themoviedb.org/3/tv/${tv.id}?api_key=${TMDB_KEY}&language=ar-SA`);
-  return {
-    originalTitle: enData.original_name || tv.original_name || "",
-    englishTitle: enData.name || tv.name || "",
-    arabicTitle: arData.name || ""
-  };
+    const TMDB_KEY = "439c478a771f35c05022f9feabcca01c";
+    const data = await fetchJson(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_KEY}&external_source=imdb_id`);
+    const tv = data.tv_results && data.tv_results[0];
+    const movie = data.movie_results && data.movie_results[0];
+    const item = tv || movie;
+    if (!item) return null;
+    const type = tv ? "tv" : "movie";
+    const enData = await fetchJson(`https://api.themoviedb.org/3/${type}/${item.id}?api_key=${TMDB_KEY}&language=en-US`);
+    const arData = await fetchJson(`https://api.themoviedb.org/3/${type}/${item.id}?api_key=${TMDB_KEY}&language=ar-SA`);
+    return {
+        title: arData.name || arData.title || enData.name || enData.title || "",
+        originalTitle: enData.original_name || enData.original_title || "",
+        type: type
+    };
 }
 
 function romanizeToSlug(name) {
-  const map = { "ş": "s", "Ş": "s", "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c", "ı": "i", "İ": "i", "ğ": "g", "Ğ": "g" };
-  return String(name || "").replace(/[şŞüÜöÖçÇıİğĞ]/g, c => map[c] || c).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const map = { "ş": "s", "Ş": "s", "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c", "ı": "i", "İ": "i", "ğ": "g", "Ğ": "g" };
+    return String(name || "").replace(/[şŞüÜöÖçÇıİğĞ]/g, c => map[c] || c).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function arabicToSlug(name) {
-  return String(name || "").trim().replace(/\s+/g, "-").replace(/^-|-$/g, "");
-}
-
-function unpackPACK(html) {
-  try {
-    const match = html.match(/eval\(function\(p,a,c,k,e,d\)\{[\s\S]*?\}\('((?:[^'\\]|\\.)*)',\s*(\d+)\s*,\s*(\d+)\s*,'((?:[^'\\]|\\.)*)'.split\('\|'\)/);
-    if (!match) return "";
-    let [, p, a, c, k] = match;
-    a = parseInt(a);
-    c = parseInt(c);
-    k = k.split("|");
-    const dict = {};
-    while (c--) {
-      const key = c.toString(a > 10 ? 36 : 10);
-      dict[key] = k[c] || key;
-    }
-    return p.replace(/\b(\w+)\b/g, m => dict[m] !== undefined ? dict[m] : m);
-  } catch { return ""; }
-}
-
-function extractM3u8(text) {
-  const m = text.match(/(?:file|src)\s*:\s*["'](https?:\/\/[^"']*\.m3u8[^"']*)["']/i);
-  if (m) return m[1].replace(/&amp;/g, '&');
-  const m2 = text.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
-  return m2 ? m2[0].replace(/&amp;/g, '&') : "";
-}
-
-async function tryEmbed(embedUrl, referer) {
-  const html = await fetchText(embedUrl, referer);
-  if (!html || html.length < 100 || html.includes("File is no longer available")) return null;
-  if (html.includes("eval(function(p,a,c,k,e,d)")) {
-    const unpacked = unpackPACK(html);
-    const m3u8 = extractM3u8(unpacked);
-    if (m3u8) return { m3u8, embedUrl };
-  }
-  const m3u8 = extractM3u8(html);
-  if (m3u8) return { m3u8, embedUrl };
-  return null;
-}
-
-function buildStreams(result, serverName) {
-  if (!result || !result.m3u8) return [];
-  const referer = (result.embedUrl || "").match(/^(https?:\/\/[^/]+)/)?.[1] || "";
-  const headers = {
-    "Referer": referer + "/",
-    "Origin": referer,
-    "User-Agent": HEADERS["User-Agent"]
-  };
-
-  const emoji = serverName.toLowerCase().includes("hd") ? "🎬" : "📺";
-  const varMatch = result.m3u8.match(/^(.+_),([a-zA-Z]+(?:,[a-zA-Z]+)*),\.urlset\/master\.m3u8(\?.+)?$/);
-  
-  if (varMatch) {
-    const qualMap = { x: "1080P", h: "720P", n: "480P", l: "360P" };
-    return varMatch[2].split(",").filter(s => qualMap[s]).map(s => ({
-      name: `Qeseh [${qualMap[s]}]`,
-      title: `${emoji} ${serverName} - ${qualMap[s]} | مترجم`,
-      url: varMatch[1] + s + "/index-v1-a1.m3u8" + (varMatch[3] || ""),
-      behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
-    }));
-  }
-
-  return [{
-    name: "Qeseh by Abdulluh.X",
-    title: `${emoji} ${serverName} | مترجم عربي`,
-    url: result.m3u8,
-    behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
-  }];
-}
-
-async function findEpisodeUrl(meta, episode) {
-    const slugs = [];
-    if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle));
-    if (meta.englishTitle) slugs.push(romanizeToSlug(meta.englishTitle));
-    if (meta.arabicTitle) slugs.push(arabicToSlug(meta.arabicTitle));
-    if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle.split(":")[0].trim()));
-
+async function findContentUrl(meta, type, season, episode) {
+    const slugs = [romanizeToSlug(meta.originalTitle), romanizeToSlug(meta.title)];
     for (const slug of slugs) {
-        const url = `${BASE}/clarus/${slug}-episode-${episode}/`;
+        if (!slug) continue;
+        const url = type === "tv" ? 
+            `${BASE}/watch/episodes/serie-${slug}-season-${season}-episode-${episode}/see/` :
+            `${BASE}/watch/movies/movie-${slug}/see/`;
+        
         const html = await fetchText(url);
         if (html && html.length > 1000 && !html.includes("404")) return url;
     }
 
-    const searchQueries = [meta.arabicTitle, meta.originalTitle, meta.englishTitle].filter(Boolean);
-    for (const query of searchQueries) {
-        const searchHtml = await fetchText(`${BASE}/?s=${encodeURIComponent(query)}`);
-        if (!searchHtml) continue;
-        const epPattern = new RegExp(`href="(${BASE.replace(/\./g, "\\.")}/clarus/[^"]*episode-${episode}[^"]*/)"`, "i");
-        const m = searchHtml.match(epPattern);
-        if (m) return m[1];
+    // Search Fallback
+    const searchHtml = await fetchText(`${BASE}/?s=${encodeURIComponent(meta.title)}`);
+    const linkPattern = /href="(https?:\/\/3iskk\.online\/(?:serie|movie)-[^"]+)"/g;
+    let match;
+    if (searchHtml) {
+        while ((match = linkPattern.exec(searchHtml)) !== null) {
+            const url = match[1];
+            const slug = url.split('/').filter(Boolean).pop();
+            const epUrl = type === "tv" ? 
+                `${BASE}/watch/episodes/${slug}-season-${season}-episode-${episode}/see/` :
+                `${BASE}/watch/movies/${slug}/see/`;
+            const epHtml = await fetchText(epUrl);
+            if (epHtml && epHtml.length > 1000 && !epHtml.includes("404")) return epUrl;
+        }
     }
     return null;
 }
 
-async function getQesehStreams(imdbId, season, episode) {
-  const meta = await getTmdbMeta(imdbId);
-  if (!meta) return [];
+function extractM3u8(text) {
+    const m = text.match(/https?:\/\/[^\s"'<>|]+\.m3u8[^\s"'<>|]*/g);
+    return m ? [...new Set(m)].map(u => u.replace(/&amp;/g, '&')) : [];
+}
 
-  const episodeUrl = await findEpisodeUrl(meta, episode);
-  if (!episodeUrl) return [];
+async function getStreams(imdbId, type, season, episode) {
+    const meta = await getTmdbMeta(imdbId);
+    if (!meta) return [];
 
-  const epHtml = await fetchText(episodeUrl);
-  const watchMatch = epHtml.match(/href="(https?:\/\/(?:qesen\.net|thenextstop\.net|maxmoto\.net)[^"]*\?post=([A-Za-z0-9+/=]+))"/);
-  if (!watchMatch) return [];
+    const watchPageUrl = await findContentUrl(meta, type, season, episode);
+    if (!watchPageUrl) return [];
 
-  try {
-    const decoded = JSON.parse(Buffer.from(watchMatch[2], "base64").toString("utf-8"));
-    const allStreams = [];
-    for (const server of decoded.servers) {
-      let embedUrl = "";
-      let referer = "https://maxmoto.net/";
-      if (["arab hd", "pro hd", "red hd", "turk"].includes(server.name.toLowerCase())) {
-        embedUrl = `https://v.turkvearab.com/embed-${server.id}.html`;
-        referer = "https://v.turkvearab.com/";
-      } else if (server.name.toLowerCase().includes("estream")) {
-        embedUrl = `https://arabveturk.com/embed-${server.id}.html`;
-        referer = "https://arabveturk.com/";
-      }
+    const html = await fetchText(watchPageUrl);
+    const iframeMatches = html.match(/src="(https?:\/\/3iskk\.online\/embed\/[^"]+)"/g);
+    if (!iframeMatches) return [];
 
-      if (embedUrl) {
-        const res = await tryEmbed(embedUrl, referer);
-        if (res) allStreams.push(...buildStreams(res, server.name));
-      } else if (server.id.startsWith("http")) {
-        allStreams.push({ name: server.name, title: `🎬 ${server.name}`, url: server.id });
-      }
+    const streams = [];
+    for (const iframe of iframeMatches) {
+        const embedUrl = iframe.match(/src="([^"]+)"/)[1];
+        const embedHtml = await fetchText(embedUrl, watchPageUrl);
+        
+        const subIframe = embedHtml.match(/<iframe[^>]+src="([^"]+)"/);
+        if (subIframe) {
+            const finalEmbedUrl = subIframe[1];
+            const finalHtml = await fetchText(finalEmbedUrl, embedUrl);
+            const m3u8s = extractM3u8(finalHtml);
+            
+            for (const m3u8 of m3u8s) {
+                const domain = new URL(m3u8).hostname;
+                const headers = {
+                    "Referer": finalEmbedUrl,
+                    "Origin": new URL(finalEmbedUrl).origin,
+                    "User-Agent": HEADERS["User-Agent"]
+                };
+
+                const urlsetMatch = m3u8.match(/^(.+_),([a-zA-Z0-9,]+),\.urlset\/master\.m3u8(\?.+)?$/);
+                if (urlsetMatch) {
+                    const qualMap = { x: "1080P", h: "720P", n: "480P", l: "360P" };
+                    urlsetMatch[2].split(",").forEach(q => {
+                        if (q && qualMap[q]) {
+                            streams.push({
+                                name: `3iskk [${qualMap[q]}]`,
+                                title: `🎬 Server: ${domain} - ${qualMap[q]}`,
+                                url: `${urlsetMatch[1]}${q}/index-v1-a1.m3u8${urlsetMatch[3] || ""}`,
+                                behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
+                            });
+                        }
+                    });
+                } else {
+                    streams.push({
+                        name: "3iskk by Abdulluh.X",
+                        title: `📺 Server: ${domain}`,
+                        url: m3u8,
+                        behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
+                    });
+                }
+            }
+        }
     }
-    return allStreams;
-  } catch (e) { return []; }
+    return streams;
 }
 
 module.exports = async function(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Content-Type", "application/json");
-  const url = req.url || "/";
-  if (url === "/" || url.includes("/manifest.json")) return res.end(JSON.stringify(manifest));
-  const streamMatch = url.match(/\/stream\/series\/(.+)\.json/);
-  if (streamMatch) {
-    try {
-      const [imdbId, season = "1", episode = "1"] = streamMatch[1].split(":");
-      const streams = await getQesehStreams(imdbId, parseInt(season), parseInt(episode));
-      return res.end(JSON.stringify({ streams }));
-    } catch (e) { return res.end(JSON.stringify({ streams: [] })); }
-  }
-  res.statusCode = 404;
-  res.end(JSON.stringify({ error: "Not found" }));
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Type", "application/json");
+    const url = req.url || "/";
+    if (url === "/" || url.includes("/manifest.json")) return res.end(JSON.stringify(MANIFEST));
+    
+    const streamMatch = url.match(/\/stream\/(movie|series)\/(.+)\.json/);
+    if (streamMatch) {
+        const type = streamMatch[1] === "movie" ? "movie" : "tv";
+        const parts = streamMatch[2].split(":");
+        const imdbId = parts[0];
+        const season = type === "tv" ? parts[1] : "1";
+        const episode = type === "tv" ? parts[2] : "1";
+        
+        try {
+            const streams = await getStreams(imdbId, type, season, episode);
+            return res.end(JSON.stringify({ streams }));
+        } catch (e) { return res.end(JSON.stringify({ streams: [] })); }
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: "Not found" }));
 };
