@@ -3,7 +3,7 @@ const http = require("http");
 
 const BASE = "https://wwv.qeseh.com";
 const ADDON_NAME = "Qeseh by Abdulluh.X";
-const ADDON_ID = "community.qeseh.abdulluhx.v11";
+const ADDON_ID = "community.qeseh.abdulluhx.v12";
 const ADDON_LOGO = "https://qeseh.net/wp-content/uploads/2026/02/cropped-qeseh2026-192x192.png";
 
 const HEADERS = {
@@ -14,7 +14,7 @@ const HEADERS = {
 
 const manifest = {
   id: ADDON_ID,
-  version: "1.0.8",
+  version: "1.0.9",
   name: ADDON_NAME,
   description: "مسلسلات وافلام تركية مترجمة من قصة عشق",
   logo: ADDON_LOGO,
@@ -67,15 +67,21 @@ async function getTmdbMeta(imdbId) {
   const tv = data.tv_results && data.tv_results[0];
   if (!tv) return null;
   const enData = await fetchJson(`https://api.themoviedb.org/3/tv/${tv.id}?api_key=${TMDB_KEY}&language=en-US`);
+  const arData = await fetchJson(`https://api.themoviedb.org/3/tv/${tv.id}?api_key=${TMDB_KEY}&language=ar-SA`);
   return {
     originalTitle: enData.original_name || tv.original_name || "",
-    englishTitle: enData.name || tv.name || ""
+    englishTitle: enData.name || tv.name || "",
+    arabicTitle: arData.name || ""
   };
 }
 
 function romanizeToSlug(name) {
   const map = { "ş": "s", "Ş": "s", "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c", "ı": "i", "İ": "i", "ğ": "g", "Ğ": "g" };
   return String(name || "").replace(/[şŞüÜöÖçÇıİğĞ]/g, c => map[c] || c).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function arabicToSlug(name) {
+  return String(name || "").trim().replace(/\s+/g, "-").replace(/^-|-$/g, "");
 }
 
 function unpackPACK(html) {
@@ -133,7 +139,7 @@ function buildStreams(result, serverName) {
       name: `Qeseh [${qualMap[s]}]`,
       title: `${emoji} ${serverName} - ${qualMap[s]} | مترجم`,
       url: varMatch[1] + s + "/index-v1-a1.m3u8" + (varMatch[3] || ""),
-      behaviorHints: { notWebReady: false, headers: headers }
+      behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
     }));
   }
 
@@ -141,7 +147,7 @@ function buildStreams(result, serverName) {
     name: "Qeseh by Abdulluh.X",
     title: `${emoji} ${serverName} | مترجم عربي`,
     url: result.m3u8,
-    behaviorHints: { notWebReady: false, headers: headers }
+    behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
   }];
 }
 
@@ -149,6 +155,7 @@ async function findEpisodeUrl(meta, episode) {
     const slugs = [];
     if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle));
     if (meta.englishTitle) slugs.push(romanizeToSlug(meta.englishTitle));
+    if (meta.arabicTitle) slugs.push(arabicToSlug(meta.arabicTitle));
     if (meta.originalTitle) slugs.push(romanizeToSlug(meta.originalTitle.split(":")[0].trim()));
 
     for (const slug of slugs) {
@@ -157,8 +164,9 @@ async function findEpisodeUrl(meta, episode) {
         if (html && html.length > 1000 && !html.includes("404")) return url;
     }
 
-    for (const title of [meta.originalTitle, meta.englishTitle].filter(Boolean)) {
-        const searchHtml = await fetchText(`${BASE}/?s=${encodeURIComponent(title)}`);
+    const searchQueries = [meta.arabicTitle, meta.originalTitle, meta.englishTitle].filter(Boolean);
+    for (const query of searchQueries) {
+        const searchHtml = await fetchText(`${BASE}/?s=${encodeURIComponent(query)}`);
         if (!searchHtml) continue;
         const epPattern = new RegExp(`href="(${BASE.replace(/\./g, "\\.")}/clarus/[^"]*episode-${episode}[^"]*/)"`, "i");
         const m = searchHtml.match(epPattern);
