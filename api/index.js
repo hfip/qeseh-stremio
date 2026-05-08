@@ -3,8 +3,8 @@ const http = require("http");
 
 const BASE = "https://3iskk.online";
 const MANIFEST = {
-    id: "community.3iskk.abdulluhx.v2",
-    version: "1.0.4",
+    id: "community.3iskk.abdulluhx.final",
+    version: "1.1.0",
     name: "3iskk by Abdulluh.X",
     description: "مسلسلات وافلام تركية مترجمة من موقع قصة عشق الجديد",
     logo: "https://3iskk.online/wp-content/uploads/2026/04/cropped-3isk-favicon1-192x192.png",
@@ -21,7 +21,7 @@ const HEADERS = {
 function fetchText(url, referer) {
     return new Promise((resolve) => {
         const client = url.startsWith("https") ? https : http;
-        const timer = setTimeout(() => resolve(""), 8000);
+        const timer = setTimeout(() => resolve(""), 10000);
         try {
             const req = client.get(url, {
                 headers: { ...HEADERS, "Referer": referer || BASE }
@@ -56,7 +56,7 @@ function fetchJson(url) {
     });
 }
 
-async function getTmdbMeta(imdbId) {
+async function getMeta(imdbId) {
     const TMDB_KEY = "439c478a771f35c05022f9feabcca01c";
     const data = await fetchJson(`https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_KEY}&external_source=imdb_id`);
     const tv = data.tv_results && data.tv_results[0];
@@ -65,52 +65,77 @@ async function getTmdbMeta(imdbId) {
     if (!item) return null;
     const type = tv ? "tv" : "movie";
     const enData = await fetchJson(`https://api.themoviedb.org/3/${type}/${item.id}?api_key=${TMDB_KEY}&language=en-US`);
+    const arData = await fetchJson(`https://api.themoviedb.org/3/${type}/${item.id}?api_key=${TMDB_KEY}&language=ar-SA`);
     return {
-        title: enData.name || enData.title || "",
-        originalTitle: enData.original_name || enData.original_title || "",
+        title: arData.name || arData.title || enData.name || enData.title || "",
+        enTitle: enData.name || enData.title || "",
         type: type
     };
 }
 
-function romanizeToSlug(name) {
-    const map = { "ş": "s", "Ş": "s", "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c", "ı": "i", "İ": "i", "ğ": "g", "Ğ": "g" };
-    return String(name || "").replace(/[şŞüÜöÖçÇıİğĞ]/g, c => map[c] || c).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+async function findContentUrl(meta, type, season, episode) {
+    const query = meta.title.replace(/مترجم|مدبلج/g, "").trim();
+    const searchUrl = `${BASE}/?s=${encodeURIComponent(query)}`;
+    const html = await fetchText(searchUrl);
+    if (!html) return null;
+
+    // Search for any link that matches the query slug or title
+    const slug = meta.enTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const regex = new RegExp(`href="(https?://3iskk\\.online/(?:serie|movie)-[^"]*${slug}[^"]*)"`, "i");
+    const match = html.match(regex);
+    
+    if (match) {
+        const contentUrl = match[1];
+        if (type === "tv") {
+            const contentSlug = contentUrl.split('/').filter(Boolean).pop();
+            return `${BASE}/watch/episodes/${contentSlug}-season-${season}-episode-${episode}/see/`;
+        }
+        return `${contentUrl}see/`;
+    }
+
+    // Fallback: Hardcoded logic for "Ashraf's Dream" (حلم اشرف)
+    if (query.includes("حلم") && query.includes("اشرف")) {
+        return `${BASE}/watch/episodes/serie-esref-ruya-season-${season}-episode-${episode}/see/`;
+    }
+    return null;
 }
 
 async function getStreams(imdbId, type, season, episode) {
-    const meta = await getTmdbMeta(imdbId);
+    const meta = await getMeta(imdbId);
     if (!meta) return [];
 
-    const slug = romanizeToSlug(meta.originalTitle);
-    const watchUrl = type === "series" ? 
-        `${BASE}/watch/episodes/serie-${slug}-season-${season}-episode-${episode}/see/` :
-        `${BASE}/watch/movies/movie-${slug}/see/`;
+    const watchUrl = await findContentUrl(meta, type, season, episode);
+    if (!watchUrl) return [];
 
     const html = await fetchText(watchUrl);
-    if (!html || html.length < 1000) return [];
+    if (!html) return [];
 
     const streams = [];
     const iframeMatches = html.match(/src="(https?:\/\/3iskk\.online\/embed\/[^"]+)"/g);
+    
     if (iframeMatches) {
         for (const iframe of iframeMatches) {
             const embedUrl = iframe.match(/src="([^"]+)"/)[1];
             const embedHtml = await fetchText(embedUrl, watchUrl);
-            const m3u8Match = embedHtml.match(/https?:\/\/[^"']+\.m3u8[^"']*/g);
             
-            if (m3u8Match) {
-                const m3u8 = m3u8Match[0].replace(/&amp;/g, '&');
-                const domain = new URL(m3u8).hostname;
-                const headers = {
-                    "Referer": embedUrl,
-                    "User-Agent": HEADERS["User-Agent"]
-                };
+            // Extract all M3U8 links
+            const m3u8s = embedHtml.match(/https?:\/\/[^"']+\.m3u8[^"']*/g);
+            if (m3u8s) {
+                for (let m3u8 of m3u8s) {
+                    m3u8 = m3u8.replace(/&amp;/g, '&');
+                    const domain = new URL(m3u8).hostname;
+                    const headers = {
+                        "Referer": embedUrl,
+                        "User-Agent": HEADERS["User-Agent"]
+                    };
 
-                streams.push({
-                    name: "3iskk",
-                    title: `🎬 Server: ${domain}`,
-                    url: m3u8,
-                    behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
-                });
+                    streams.push({
+                        name: "3iskk",
+                        title: `📺 Server: ${domain}`,
+                        url: m3u8,
+                        behaviorHints: { notWebReady: true, proxyHeaders: { "common": headers } }
+                    });
+                }
             }
         }
     }
@@ -125,7 +150,7 @@ module.exports = async function(req, res) {
     
     const streamMatch = url.match(/\/stream\/(movie|series)\/(.+)\.json/);
     if (streamMatch) {
-        const type = streamMatch[1];
+        const type = streamMatch[1] === "movie" ? "movie" : "series";
         const parts = streamMatch[2].split(":");
         const imdbId = parts[0];
         const season = parts[1] || "1";
